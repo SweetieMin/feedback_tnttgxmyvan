@@ -3,8 +3,13 @@
 namespace App\Providers;
 
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\User;
+use App\Support\MailBranding;
+use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -30,6 +35,7 @@ class FortifyServiceProvider extends ServiceProvider
     {
         $this->configureActions();
         $this->configureViews();
+        $this->configureMail();
         $this->configureRateLimiting();
     }
 
@@ -68,6 +74,40 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/two-factor-challenge'));
 
         Fortify::confirmPasswordView(fn () => Inertia::render('auth/confirm-password'));
+    }
+
+    /**
+     * Thay template mail mặc định của Laravel bằng layout thương hiệu riêng
+     * (resources/views/emails) cho mail đặt lại mật khẩu và xác thực email.
+     */
+    private function configureMail(): void
+    {
+        ResetPassword::toMailUsing(function (User $notifiable, string $token): MailMessage {
+            $brand = app(MailBranding::class)->toArray();
+            $minutes = (int) config('auth.passwords.'.config('auth.defaults.passwords').'.expire', 60);
+
+            return (new MailMessage)
+                ->subject('['.$brand['name'].'] Đặt lại mật khẩu')
+                ->view(['emails.auth.reset-password', 'emails.auth.reset-password-text'], [
+                    'brand' => $brand,
+                    'userName' => $notifiable->name,
+                    'url' => url(route('password.reset', ['token' => $token, 'email' => $notifiable->getEmailForPasswordReset()], false)),
+                    'minutes' => $minutes,
+                    'expiresAt' => now()->addMinutes($minutes)->format('H:i, d/m/Y'),
+                ]);
+        });
+
+        VerifyEmail::toMailUsing(function (User $notifiable, string $url): MailMessage {
+            $brand = app(MailBranding::class)->toArray();
+
+            return (new MailMessage)
+                ->subject('['.$brand['name'].'] Xác thực email')
+                ->view(['emails.auth.verify-email', 'emails.auth.verify-email-text'], [
+                    'brand' => $brand,
+                    'userName' => $notifiable->name,
+                    'url' => $url,
+                ]);
+        });
     }
 
     /**
