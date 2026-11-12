@@ -38,7 +38,14 @@ class FeedbackPushNotification extends Notification
     public function toWebPush(object $notifiable): array
     {
         return [
-            'title' => $this->event === 'created' ? 'Góp ý mới' : 'Có trao đổi mới',
+            'title' => match ($this->event) {
+                'created' => 'Góp ý mới',
+                'replied' => 'Có trao đổi mới',
+                'assigned' => 'Bạn được giao xử lý góp ý',
+                'status_changed' => 'Góp ý đã cập nhật trạng thái',
+                'reopened' => 'Góp ý được mở lại',
+                default => 'Thông báo mới',
+            },
             'body' => Str::limit($this->feedback->title, 100),
             'url' => route('feedback.show', $this->feedback),
         ];

@@ -10,7 +10,9 @@ use App\Models\Feedback;
 use App\Models\FeedbackActivity;
 use App\Models\FeedbackNotification;
 use App\Models\User;
+use App\Notifications\FeedbackPushNotification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Nơi duy nhất được phép ghi feedbacks.status/assigned_to — mọi controller
@@ -91,7 +93,7 @@ class FeedbackStatusService
                 (string) $newHandler->id,
             );
 
-            $this->notify($newHandler->id, $locked, 'assigned', ['title' => $locked->title]);
+            $this->notify($newHandler, $locked, 'assigned', ['title' => $locked->title]);
 
             return $locked;
         });
@@ -127,7 +129,7 @@ class FeedbackStatusService
             $this->logActivity($locked, ActivityType::StatusChange, $actor->id, $from->value, $to->value, $reason);
 
             if (in_array($to, [FeedbackStatus::InProgress, FeedbackStatus::Resolved], true)) {
-                $this->notify($locked->user_id, $locked, 'status_changed', [
+                $this->notify($locked->sender, $locked, 'status_changed', [
                     'title' => $locked->title,
                     'to_status' => $to->value,
                 ]);
@@ -161,7 +163,7 @@ class FeedbackStatusService
             $recipientId = $locked->assigned_to;
 
             if ($recipientId !== null && $recipientId !== $actor->id) {
-                $this->notify($recipientId, $locked, 'reopened', ['title' => $locked->title]);
+                $this->notify($locked->assignee, $locked, 'reopened', ['title' => $locked->title]);
             }
 
             return $locked;
@@ -195,13 +197,15 @@ class FeedbackStatusService
     /**
      * @param  array<string, mixed>  $data
      */
-    private function notify(int $userId, Feedback $feedback, string $type, array $data): void
+    private function notify(User $user, Feedback $feedback, string $type, array $data): void
     {
         FeedbackNotification::create([
-            'user_id' => $userId,
+            'user_id' => $user->id,
             'feedback_id' => $feedback->id,
             'type' => $type,
             'data' => $data,
         ]);
+
+        Notification::send($user, new FeedbackPushNotification($feedback, $type));
     }
 }

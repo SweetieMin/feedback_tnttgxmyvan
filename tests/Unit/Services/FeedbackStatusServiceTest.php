@@ -9,8 +9,10 @@ use App\Exceptions\FeedbackConflictException;
 use App\Models\Feedback;
 use App\Models\FeedbackMessage;
 use App\Models\User;
+use App\Notifications\FeedbackPushNotification;
 use App\Services\FeedbackStatusService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class FeedbackStatusServiceTest extends TestCase
@@ -78,6 +80,8 @@ class FeedbackStatusServiceTest extends TestCase
 
     public function test_change_status_moves_reviewing_to_in_progress(): void
     {
+        Notification::fake();
+
         $handler = User::factory()->create(['role' => UserRole::Handler]);
         $feedback = Feedback::factory()->create(['status' => FeedbackStatus::Reviewing, 'assigned_to' => $handler->id]);
 
@@ -88,6 +92,11 @@ class FeedbackStatusServiceTest extends TestCase
             'user_id' => $feedback->user_id,
             'type' => 'status_changed',
         ]);
+        Notification::assertSentTo(
+            $feedback->sender,
+            FeedbackPushNotification::class,
+            fn ($notification) => $notification->event === 'status_changed',
+        );
     }
 
     public function test_change_status_rejects_invalid_transition(): void
@@ -142,6 +151,8 @@ class FeedbackStatusServiceTest extends TestCase
 
     public function test_reassign_moves_assignment_and_notifies_new_handler(): void
     {
+        Notification::fake();
+
         $admin = User::factory()->create(['role' => UserRole::Admin]);
         $oldHandler = User::factory()->create(['role' => UserRole::Handler]);
         $newHandler = User::factory()->create(['role' => UserRole::Handler]);
@@ -154,6 +165,7 @@ class FeedbackStatusServiceTest extends TestCase
             'user_id' => $newHandler->id,
             'type' => 'assigned',
         ]);
+        Notification::assertSentTo($newHandler, FeedbackPushNotification::class);
     }
 
     public function test_reassign_rejects_when_feedback_already_resolved(): void
@@ -169,6 +181,8 @@ class FeedbackStatusServiceTest extends TestCase
 
     public function test_reopen_from_resolved_increments_count_and_notifies_handler(): void
     {
+        Notification::fake();
+
         $owner = User::factory()->create();
         $handler = User::factory()->create(['role' => UserRole::Handler]);
         $feedback = Feedback::factory()->create([
@@ -186,6 +200,7 @@ class FeedbackStatusServiceTest extends TestCase
             'user_id' => $handler->id,
             'type' => 'reopened',
         ]);
+        Notification::assertSentTo($handler, FeedbackPushNotification::class);
     }
 
     public function test_reopen_rejects_feedback_that_is_still_open(): void
