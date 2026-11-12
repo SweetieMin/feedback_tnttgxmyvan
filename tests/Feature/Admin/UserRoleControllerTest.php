@@ -65,8 +65,11 @@ class UserRoleControllerTest extends TestCase
         Storage::disk('public')->assertExists($user->avatar_path);
         $this->get(route('admin.users.index', ['search' => 'an@example.com']))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('users.0.avatar', Storage::disk('public')->url($user->avatar_path))
+                ->where('users.0.avatar', $user->avatar)
                 ->missing('users.0.avatar_path'));
+
+        $this->get($user->avatar)->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get('/media/avatars/'.str_repeat('a', 40).'.png')->assertNotFound();
     }
 
     public function test_admin_can_replace_an_avatar_and_invalid_upload_keeps_it(): void

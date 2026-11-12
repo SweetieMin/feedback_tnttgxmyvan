@@ -12,7 +12,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Storage;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -59,7 +58,9 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     {
         $path = $this->attributes['avatar_path'] ?? null;
 
-        return $path === null ? null : Storage::disk('public')->url($path);
+        return $path === null
+            ? null
+            : route('media.avatars.show', ['filename' => basename($path)], absolute: false);
     }
 
     /**
