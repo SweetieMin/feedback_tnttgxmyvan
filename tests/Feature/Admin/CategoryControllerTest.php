@@ -7,12 +7,38 @@ use App\Models\Category;
 use App\Models\Feedback;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class CategoryControllerTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_category_image_can_be_created_and_replaced_through_the_form(): void
+    {
+        Storage::fake('public');
+        $admin = User::factory()->create(['role' => UserRole::Admin]);
+        $this->actingAs($admin)->post(route('admin.categories.store'), [
+            'name' => 'Danh mục có ảnh',
+            'avatar' => UploadedFile::fake()->image('category.png'),
+        ])->assertSessionHasNoErrors();
+
+        $category = Category::where('name', 'Danh mục có ảnh')->sole();
+        $oldPath = $category->avatar_path;
+        Storage::disk('public')->assertExists($oldPath);
+
+        $this->post(route('admin.categories.update', $category), [
+            '_method' => 'PATCH',
+            'name' => 'Tên mới',
+            'avatar' => UploadedFile::fake()->image('new.png'),
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame('Tên mới', $category->refresh()->name);
+        Storage::disk('public')->assertMissing($oldPath);
+        Storage::disk('public')->assertExists($category->avatar_path);
+    }
 
     public function test_admin_sees_every_category_with_its_feedback_count(): void
     {

@@ -17,9 +17,21 @@ class PasswordUpdateRequest extends FormRequest
      */
     public function rules(): array
     {
+        $passwordRules = $this->passwordRules();
+
+        if ($this->routeIs('password.first.update')) {
+            $passwordRules[] = 'different:current_password';
+        }
+
         return [
             'current_password' => $this->currentPasswordRules(),
-            'password' => $this->passwordRules(),
+            'password' => $passwordRules,
         ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return ['password.different' => 'Mật khẩu mới phải khác mật khẩu tạm.'];
     }
 }

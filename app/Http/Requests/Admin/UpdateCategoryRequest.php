@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Services\AdminImage;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -18,6 +19,7 @@ class UpdateCategoryRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'avatar' => ['nullable', ...AdminImage::RULES],
             'name' => ['sometimes', 'required', 'string', 'max:100', Rule::unique('categories', 'name')->ignore($this->route('category'))],
             'is_active' => ['sometimes', 'boolean'],
         ];

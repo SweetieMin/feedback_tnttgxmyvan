@@ -13,6 +13,8 @@ use Illuminate\Support\Carbon;
  * @property string $name
  * @property string $slug
  * @property bool $is_active
+ * @property string|null $avatar_path
+ * @property int $feedbacks_count
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */

@@ -14,6 +14,9 @@ Route::middleware(['auth', 'verified', 'role:admin'])
         Route::patch('categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
 
         Route::get('users', [UserRoleController::class, 'index'])->name('users.index');
+        Route::post('users', [UserRoleController::class, 'store'])->name('users.store');
+        Route::post('users/{user}/avatar', [UserRoleController::class, 'updateAvatar'])->name('users.avatar');
+        Route::patch('users/{user}', [UserRoleController::class, 'updateDetails'])->name('users.update');
         Route::patch('users/{user}/role', [UserRoleController::class, 'update'])->name('users.role');
 
         // Dùng lại QueueController — cùng trang Inertia 'feedback/queue' với

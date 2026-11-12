@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\Category;
+use App\Services\AdminImage;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,6 +20,7 @@ class StoreCategoryRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'avatar' => ['nullable', ...AdminImage::RULES],
             'name' => ['required', 'string', 'max:100', Rule::unique('categories', 'name')],
         ];
     }
