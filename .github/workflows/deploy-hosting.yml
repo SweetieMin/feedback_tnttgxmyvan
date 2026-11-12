@@ -3,19 +3,21 @@ name: Deploy to hosting
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: hosting-production
+  group: deploy-hosting-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment: production
+    timeout-minutes: 20
     env:
       APP_ENV: production
       APP_DEBUG: 'false'
@@ -61,6 +63,30 @@ jobs:
           test ! -e "$release_dir/public/hot"
           tar -czf "$RUNNER_TEMP/feedback-${GITHUB_SHA::8}.tar.gz" -C "$release_dir" .
 
+      - name: Upload release
+        uses: actions/upload-artifact@v7
+        with:
+          name: hosting-release
+          path: ${{ runner.temp }}/feedback-*.tar.gz
+          if-no-files-found: error
+          retention-days: 5
+          compression-level: 0
+          overwrite: true
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Download release
+        uses: actions/download-artifact@v7
+        with:
+          name: hosting-release
+          path: ${{ runner.temp }}
+
       - name: Deploy over SSH
         env:
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -69,6 +95,7 @@ jobs:
           SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           SSH_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENV }}
           PHP_BINARY: ${{ vars.DEPLOY_PHP_BINARY || 'php' }}
         run: |
           set -euo pipefail
@@ -100,7 +127,12 @@ jobs:
           host="$SSH_USER@$SSH_HOST"
           remote_dir="$(ssh "${ssh_options[@]}" -- "$host" 'mktemp -d')"
           [[ "$remote_dir" =~ ^/[[:alnum:]_./-]+$ ]] || exit 1
-          trap 'ssh "${ssh_options[@]}" -- "$host" "rm -f -- $remote_dir/release.tar.gz && rmdir -- $remote_dir" || true' EXIT
+          trap 'ssh "${ssh_options[@]}" -- "$host" "rm -f -- $remote_dir/release.tar.gz $remote_dir/production.env && rmdir -- $remote_dir" || true' EXIT
+
+          if [[ -n "$DEPLOY_ENV" ]]; then
+            printf '%s\n' "$DEPLOY_ENV" > "$RUNNER_TEMP/production.env"
+            scp "${ssh_options[@]}" -- "$RUNNER_TEMP/production.env" "$host:$remote_dir/production.env"
+          fi
 
           scp "${ssh_options[@]}" -- "$RUNNER_TEMP/feedback-${GITHUB_SHA::8}.tar.gz" "$host:$remote_dir/release.tar.gz"
           ssh "${ssh_options[@]}" -- "$host" "bash -s -- '$DEPLOY_PATH' '$PHP_BINARY' '$remote_dir/release.tar.gz'" <<'REMOTE'
@@ -109,8 +141,18 @@ jobs:
           php_binary="$2"
           archive="$3"
           cd "$app_dir"
-          test -f .env || { echo "Configure the production .env before deploying."; exit 1; }
-          "$php_binary" -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'
+          "$php_binary" -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' || {
+            echo "The deploy command requires PHP CLI 8.4 or newer. Check DEPLOY_PHP_BINARY."
+            exit 1
+          }
+          if [[ ! -f .env ]]; then
+            env_file="${archive%/*}/production.env"
+            if [[ -e .env || -L .env || ! -s "$env_file" ]]; then
+              echo "Create .env in DEPLOY_PATH or set DEPLOY_ENV to the production configuration."
+              exit 1
+            fi
+            (umask 077; set -o noclobber; cat "$env_file" > .env)
+          fi
           tar -xzf "$archive" --no-same-owner -C "$app_dir"
 
           "$php_binary" artisan config:clear
