@@ -14,6 +14,7 @@ export type ActivityType = 'status_change' | 'assignment_change' | 'reopened';
 export type UserSummary = {
     id: number;
     name: string;
+    avatar?: string | null;
 };
 
 export type Category = {

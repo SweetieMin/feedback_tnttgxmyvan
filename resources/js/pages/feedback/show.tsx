@@ -19,7 +19,7 @@ import InputError from '@/components/input-error';
 import { TiptapEditor } from '@/components/tiptap-editor';
 import { TiptapViewer } from '@/components/tiptap-viewer';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -177,6 +177,7 @@ export default function FeedbackShow({
                         ) : (
                             <CommentCard
                                 author={senderName}
+                                authorAvatar={feedback.sender?.avatar}
                                 date={feedback.created_at}
                                 body={feedback.content}
                                 opening
@@ -216,6 +217,7 @@ export default function FeedbackShow({
                                     <span className="flex items-center gap-2 font-medium text-foreground">
                                         <PersonAvatar
                                             name={feedback.assignee.name}
+                                            avatar={feedback.assignee.avatar}
                                             compact
                                         />
                                         {feedback.assignee.name}
@@ -290,15 +292,18 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
 
 function PersonAvatar({
     name,
+    avatar,
     compact = false,
 }: {
     name: string;
+    avatar?: string | null;
     compact?: boolean;
 }) {
     const getInitials = useInitials();
 
     return (
         <Avatar aria-hidden="true" className={compact ? 'size-6' : 'size-9'}>
+            {avatar && <AvatarImage src={avatar} alt={name} />}
             <AvatarFallback className="border bg-muted text-xs font-semibold">
                 {getInitials(name)}
             </AvatarFallback>
@@ -308,6 +313,7 @@ function PersonAvatar({
 
 function CommentCard({
     author,
+    authorAvatar,
     date,
     body,
     badge,
@@ -315,6 +321,7 @@ function CommentCard({
     internal = false,
 }: {
     author: string;
+    authorAvatar?: string | null;
     date: string;
     body: JSONContent;
     badge?: ReactNode;
@@ -324,7 +331,7 @@ function CommentCard({
     return (
         <article className="relative sm:pl-13">
             <div className="absolute top-0 left-0 hidden sm:block">
-                <PersonAvatar name={author} />
+                <PersonAvatar name={author} avatar={authorAvatar} />
             </div>
             <div
                 className={cn(
@@ -431,15 +438,19 @@ function DiscussionTimeline({
                 }
 
                 const internal = entry.visibility === 'internal';
-                const author =
-                    entry.author_id === auth.user.id
-                        ? 'Bạn'
-                        : (entry.author?.name ?? 'Người dùng đã xoá');
+                const isSelf = entry.author_id === auth.user.id;
+                const author = isSelf
+                    ? 'Bạn'
+                    : (entry.author?.name ?? 'Người dùng đã xoá');
+                const authorAvatar = isSelf
+                    ? auth.user.avatar
+                    : entry.author?.avatar;
 
                 return (
                     <li key={`message-${entry.id}`}>
                         <CommentCard
                             author={author}
+                            authorAvatar={authorAvatar}
                             date={entry.created_at}
                             body={entry.body}
                             internal={internal}
@@ -494,7 +505,7 @@ function ReplyForm({
     return (
         <form onSubmit={submit} className="relative mt-6 sm:pl-13">
             <div className="absolute top-0 left-0 hidden sm:block">
-                <PersonAvatar name={auth.user.name} />
+                <PersonAvatar name={auth.user.name} avatar={auth.user.avatar} />
             </div>
             <div className="space-y-3">
                 <h2 className="text-base font-semibold">Thêm phản hồi</h2>

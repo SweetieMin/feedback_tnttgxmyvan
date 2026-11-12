@@ -91,10 +91,10 @@ class FeedbackController extends Controller
 
         $feedback->load([
             'category:id,name',
-            'sender:id,name',
-            'assignee:id,name',
-            'activities' => fn ($query) => $query->oldest()->with('actor:id,name'),
-            'messages' => fn ($query) => $query->visibleTo($request->user())->oldest()->with('author:id,name'),
+            'sender:id,name,avatar_path',
+            'assignee:id,name,avatar_path',
+            'activities' => fn ($query) => $query->oldest()->with('actor:id,name,avatar_path'),
+            'messages' => fn ($query) => $query->visibleTo($request->user())->oldest()->with('author:id,name,avatar_path'),
         ]);
 
         $user = $request->user();
