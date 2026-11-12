@@ -8,8 +8,8 @@
             @php
                 $shareTitle = 'Cổng góp ý Đoàn TNTT GX Mỹ Vân';
                 $shareDescription = 'Gửi góp ý về sinh hoạt của Xứ đoàn Giu-se Đặng Đình Viên và theo dõi phản hồi từ ban phụ trách.';
-                $shareUrl = rtrim(config('app.url'), '/').'/';
-                $shareImage = $shareUrl.'images/tntt-my-van.png';
+                $shareUrl = route('home');
+                $shareImage = asset('images/tntt-my-van.png');
             @endphp
             <meta name="description" content="{{ $shareDescription }}">
             <meta property="og:type" content="website">

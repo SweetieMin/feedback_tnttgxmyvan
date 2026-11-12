@@ -16,6 +16,6 @@ class ExampleTest extends TestCase
         $response->assertOk()
             ->assertSee('property="og:title" content="Cổng góp ý Đoàn TNTT GX Mỹ Vân"', false)
             ->assertSee('property="og:description"', false)
-            ->assertSee('property="og:image" content="'.rtrim(config('app.url'), '/').'/images/tntt-my-van.png"', false);
+            ->assertSee('property="og:image" content="'.asset('images/tntt-my-van.png').'"', false);
     }
 }
