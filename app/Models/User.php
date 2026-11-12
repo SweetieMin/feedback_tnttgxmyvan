@@ -110,4 +110,14 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     {
         return $this->hasMany(FeedbackNotification::class);
     }
+
+    /**
+     * Các thiết bị/trình duyệt đã đăng ký nhận web push của người dùng này.
+     *
+     * @return HasMany<PushSubscription, $this>
+     */
+    public function pushSubscriptions(): HasMany
+    {
+        return $this->hasMany(PushSubscription::class);
+    }
 }

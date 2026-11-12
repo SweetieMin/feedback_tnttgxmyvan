@@ -13,6 +13,12 @@ use Inertia\Response;
 class NotificationController extends Controller
 {
     /**
+     * Số thông báo gần nhất hiện trong dropdown chuông (mục 1.3) — "xem tất
+     * cả" mới điều hướng sang trang đầy đủ (index()).
+     */
+    private const RECENT_LIMIT = 8;
+
+    /**
      * Danh sách thông báo của người dùng hiện tại, mới nhất trước (mục 1.3).
      */
     public function index(Request $request): Response
@@ -40,6 +46,22 @@ class NotificationController extends Controller
             ->count();
 
         return response()->json(['count' => $count]);
+    }
+
+    /**
+     * JSON cho dropdown chuông: chỉ RECENT_LIMIT thông báo mới nhất, cùng
+     * ngoại lệ không trả Inertia response như unreadCount().
+     */
+    public function recent(Request $request): JsonResponse
+    {
+        $notifications = $request->user()
+            ->feedbackNotifications()
+            ->with('feedback:id,title')
+            ->latest()
+            ->limit(self::RECENT_LIMIT)
+            ->get();
+
+        return response()->json(['notifications' => $notifications]);
     }
 
     /**

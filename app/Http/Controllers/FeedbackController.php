@@ -12,10 +12,13 @@ use App\Models\Feedback;
 use App\Models\FeedbackActivity;
 use App\Models\FeedbackMessage;
 use App\Models\User;
+use App\Notifications\FeedbackPushNotification;
+use App\Services\FeedbackNotificationRecipients;
 use App\Services\FeedbackStatusService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -55,7 +58,7 @@ class FeedbackController extends Controller
     /**
      * Tạo góp ý mới, luôn ở trạng thái "new" và ghi lịch sử xử lý đầu tiên.
      */
-    public function store(StoreFeedbackRequest $request): RedirectResponse
+    public function store(StoreFeedbackRequest $request, FeedbackNotificationRecipients $recipients): RedirectResponse
     {
         /** @var array<string, mixed> $content */
         $content = $request->input('content');
@@ -76,6 +79,11 @@ class FeedbackController extends Controller
             'from_value' => null,
             'to_value' => FeedbackStatus::New->value,
         ]);
+
+        Notification::send(
+            $recipients->for($feedback, $request->user(), includeOwner: false),
+            new FeedbackPushNotification($feedback, 'created'),
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Đã gửi góp ý.')]);
 

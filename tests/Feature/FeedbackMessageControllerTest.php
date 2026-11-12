@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Enums\UserRole;
 use App\Models\Feedback;
 use App\Models\User;
+use App\Notifications\FeedbackPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class FeedbackMessageControllerTest extends TestCase
@@ -82,6 +84,42 @@ class FeedbackMessageControllerTest extends TestCase
             'feedback_id' => $feedback->id,
             'type' => 'new_reply',
         ]);
+    }
+
+    public function test_public_reply_pushes_owner_and_admin_but_not_the_author(): void
+    {
+        Notification::fake();
+
+        $owner = User::factory()->create();
+        $handler = User::factory()->create(['role' => UserRole::Handler]);
+        $admin = User::factory()->create(['role' => UserRole::Admin]);
+        $feedback = Feedback::factory()->create(['user_id' => $owner->id, 'assigned_to' => $handler->id]);
+
+        $this->actingAs($handler)->post(route('feedback.messages.store', $feedback), [
+            'body' => $this->paragraphDoc('Chúng tôi đang xem xét.'),
+            'visibility' => 'public',
+        ]);
+
+        Notification::assertSentTo([$owner, $admin], FeedbackPushNotification::class, fn ($notification) => $notification->feedback->is($feedback) && $notification->event === 'replied');
+        Notification::assertNotSentTo($handler, FeedbackPushNotification::class);
+    }
+
+    public function test_internal_note_pushes_admin_but_never_the_owner(): void
+    {
+        Notification::fake();
+
+        $owner = User::factory()->create();
+        $handler = User::factory()->create(['role' => UserRole::Handler]);
+        $admin = User::factory()->create(['role' => UserRole::Admin]);
+        $feedback = Feedback::factory()->create(['user_id' => $owner->id, 'assigned_to' => $handler->id]);
+
+        $this->actingAs($handler)->post(route('feedback.messages.store', $feedback), [
+            'body' => $this->paragraphDoc('Ghi chú riêng cho team.'),
+            'visibility' => 'internal',
+        ]);
+
+        Notification::assertSentTo($admin, FeedbackPushNotification::class);
+        Notification::assertNotSentTo($owner, FeedbackPushNotification::class);
     }
 
     public function test_second_public_reply_does_not_overwrite_first_response_at(): void

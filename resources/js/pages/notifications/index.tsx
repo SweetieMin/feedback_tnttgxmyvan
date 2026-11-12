@@ -1,54 +1,18 @@
 import { Head, router } from '@inertiajs/react';
-import {
-    BellOff,
-    Check,
-    MessageSquareReply,
-    RefreshCw,
-    RotateCcw,
-    UserRoundCheck,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { BellOff, Check } from 'lucide-react';
 import { useState } from 'react';
 import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
+import { formatDateTime } from '@/lib/feedback';
 import {
-    formatDateTime,
-    isFeedbackStatus,
-    STATUS_LABELS,
-} from '@/lib/feedback';
+    describeNotification,
+    NOTIFICATION_TYPE_ICONS,
+} from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import { show } from '@/routes/feedback';
 import { index } from '@/routes/notifications';
-import type { FeedbackNotification, NotificationType } from '@/types';
-
-const TYPE_ICONS: Record<NotificationType, LucideIcon> = {
-    assigned: UserRoundCheck,
-    new_reply: MessageSquareReply,
-    status_changed: RefreshCw,
-    reopened: RotateCcw,
-};
-
-function describe(notification: FeedbackNotification): string {
-    const title =
-        notification.data.title ?? notification.feedback?.title ?? 'một góp ý';
-
-    switch (notification.type) {
-        case 'assigned':
-            return `Bạn được giao xử lý góp ý “${title}”.`;
-        case 'new_reply':
-            return `Có trả lời mới cho góp ý “${title}”.`;
-        case 'status_changed': {
-            const status = notification.data.to_status;
-
-            return isFeedbackStatus(status)
-                ? `Góp ý “${title}” đã chuyển sang “${STATUS_LABELS[status]}”.`
-                : `Góp ý “${title}” vừa được cập nhật trạng thái.`;
-        }
-        case 'reopened':
-            return `Góp ý “${title}” đã được mở lại.`;
-    }
-}
+import type { FeedbackNotification } from '@/types';
 
 export default function NotificationsIndex({
     notifications,
@@ -107,7 +71,8 @@ export default function NotificationsIndex({
                 ) : (
                     <ul className="divide-y rounded-xl border">
                         {notifications.map((notification) => {
-                            const Icon = TYPE_ICONS[notification.type];
+                            const Icon =
+                                NOTIFICATION_TYPE_ICONS[notification.type];
                             const unread = notification.read_at === null;
 
                             return (
@@ -144,7 +109,7 @@ export default function NotificationsIndex({
                                                     : 'text-muted-foreground',
                                             )}
                                         >
-                                            {describe(notification)}
+                                            {describeNotification(notification)}
                                         </p>
                                         <p className="mt-0.5 text-xs text-muted-foreground">
                                             {formatDateTime(

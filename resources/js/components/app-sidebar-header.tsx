@@ -1,6 +1,9 @@
 import { Moon, Sun } from 'lucide-react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
-import { NotificationBell } from '@/components/notification-bell';
+import {
+    NotificationBell,
+    PushNotificationToggle,
+} from '@/components/notification-bell';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -29,6 +32,7 @@ export function AppSidebarHeader({
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-2">
                 <NotificationBell />
+                <PushNotificationToggle />
                 <Separator
                     orientation="vertical"
                     className="data-[orientation=vertical]:h-5"

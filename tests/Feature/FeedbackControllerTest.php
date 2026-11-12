@@ -8,7 +8,9 @@ use App\Models\Category;
 use App\Models\Feedback;
 use App\Models\FeedbackMessage;
 use App\Models\User;
+use App\Notifications\FeedbackPushNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -68,6 +70,26 @@ class FeedbackControllerTest extends TestCase
             'actor_id' => $employee->id,
             'to_value' => 'new',
         ]);
+    }
+
+    public function test_submitting_feedback_pushes_admins_but_not_the_submitter(): void
+    {
+        Notification::fake();
+
+        $employee = User::factory()->create();
+        $admin = User::factory()->create(['role' => UserRole::Admin]);
+        $category = Category::factory()->create();
+
+        $this->actingAs($employee)->post(route('feedback.store'), [
+            'title' => 'Góp ý về quy trình',
+            'content' => $this->paragraphDoc('Nội dung góp ý chi tiết.'),
+            'category_id' => $category->id,
+        ]);
+
+        $feedback = Feedback::where('user_id', $employee->id)->firstOrFail();
+
+        Notification::assertSentTo($admin, FeedbackPushNotification::class, fn ($notification) => $notification->feedback->is($feedback) && $notification->event === 'created');
+        Notification::assertNotSentTo($employee, FeedbackPushNotification::class);
     }
 
     public function test_store_rejects_disallowed_tiptap_node(): void
