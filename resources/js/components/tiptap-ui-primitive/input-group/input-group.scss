@@ -1,0 +1,254 @@
+/* ----------------------------------------------------------------
+------------------ TIPTAP INPUT GROUP STYLING ---------------------
+---------------------------------------------------------------- */
+
+:root {
+    --tt-ig-radius: var(--tt-radius-md);
+    --tt-ig-border: var(--tt-gray-light-a-200);
+    --tt-ig-border-focus: var(--tt-gray-light-a-300);
+    --tt-ig-border-invalid: var(--tt-color-text-red);
+    --tt-ig-ring-invalid: var(--tt-color-text-red-contrast);
+    --tt-ig-disabled-bg: var(--tt-gray-light-a-50);
+    --tt-ig-addon-color: var(--tt-gray-light-a-400);
+}
+
+.dark {
+    --tt-ig-border: var(--tt-gray-dark-a-200);
+    --tt-ig-border-focus: var(--tt-gray-dark-a-300);
+    --tt-ig-disabled-bg: var(--tt-gray-dark-a-50);
+    --tt-ig-addon-color: var(--tt-gray-dark-a-400);
+}
+
+/* -----------------------------------------------------------------------------
+   Group
+
+   The frame around a control and its addons. The control inside gives up
+   its own border, so focus, validation, and disabled states are read from
+   the children and drawn on the frame.
+   ----------------------------------------------------------------------------- */
+
+.tiptap-input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    height: 2rem;
+    border: 1px solid var(--tt-ig-border);
+    border-radius: var(--tt-ig-radius);
+    background-color: transparent;
+    outline: none;
+    transition-property: color, background-color, border-color;
+    transition-duration: var(--tt-transition-duration-default);
+    transition-timing-function: var(--tt-transition-easing-default);
+
+    /* A textarea or a block addon turns the row into a column that grows
+     with its content. */
+    &:has(> textarea),
+    &:has(> [data-align='block-start']),
+    &:has(> [data-align='block-end']) {
+        height: auto;
+    }
+
+    &:has(> [data-align='block-start']),
+    &:has(> [data-align='block-end']) {
+        flex-direction: column;
+    }
+
+    /* Give the control room next to an addon. */
+    &:has(> [data-align='inline-start']) > input {
+        padding-inline-start: 0.375rem;
+    }
+
+    &:has(> [data-align='inline-end']) > input {
+        padding-inline-end: 0.375rem;
+    }
+
+    &:has(> [data-align='block-start']) > input {
+        padding-bottom: 0.75rem;
+    }
+
+    &:has(> [data-align='block-end']) > input {
+        padding-top: 0.75rem;
+    }
+
+    &:has([data-slot='tiptap-input-group-control']:focus-visible) {
+        border-color: var(--tt-ig-border-focus);
+    }
+
+    &:has([data-slot][aria-invalid='true']) {
+        border-color: var(--tt-ig-border-invalid);
+        box-shadow: 0 0 0 3px var(--tt-ig-ring-invalid);
+    }
+
+    &:has(:disabled) {
+        background-color: var(--tt-ig-disabled-bg);
+        opacity: 0.5;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Addon
+
+   Icons, text, keyboard hints, or buttons beside the control. Inline addons
+   sit at either end of the row; block addons take a full row above or
+   below. Clicking an addon focuses the control, so it reads as part of it.
+   ----------------------------------------------------------------------------- */
+
+.tiptap-input-group-addon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: auto;
+    gap: 0.5rem;
+    padding-block: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--tt-ig-addon-color);
+    cursor: text;
+    user-select: none;
+
+    > svg {
+        width: 1rem;
+        height: 1rem;
+    }
+
+    > kbd {
+        border-radius: calc(var(--tt-ig-radius) - 5px);
+    }
+
+    /* A button or a kbd carries its own visual edge, so it tucks in a little
+     to line up with the frame. */
+    &[data-align='inline-start'] {
+        order: -1;
+        padding-inline-start: 0.5rem;
+
+        &:has(> button) {
+            margin-inline-start: -0.3rem;
+        }
+
+        &:has(> kbd) {
+            margin-inline-start: -0.15rem;
+        }
+    }
+
+    &[data-align='inline-end'] {
+        order: 9999;
+        padding-inline-end: 0.5rem;
+
+        &:has(> button) {
+            margin-inline-end: -0.3rem;
+        }
+
+        &:has(> kbd) {
+            margin-inline-end: -0.15rem;
+        }
+    }
+
+    &[data-align='block-start'] {
+        order: -1;
+        width: 100%;
+        justify-content: flex-start;
+        padding: 0.5rem 0.625rem 0;
+    }
+
+    &[data-align='block-end'] {
+        order: 9999;
+        width: 100%;
+        justify-content: flex-start;
+        padding: 0 0.625rem 0.5rem;
+    }
+}
+
+/* Consumers can flag the group as disabled without disabling the control. */
+.tiptap-input-group[data-disabled='true'] .tiptap-input-group-addon {
+    opacity: 0.5;
+}
+
+/* -----------------------------------------------------------------------------
+   Button
+
+   A tiptap Button sized to sit inside the frame. `xs` and `icon-xs` are a
+   step below the button's small size; `sm` and `icon-sm` keep its default
+   2rem height. The attribute selector outranks the button's own rules.
+   ----------------------------------------------------------------------------- */
+
+.tiptap-input-group-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    box-shadow: none;
+
+    &[data-size='xs'] {
+        height: 1.5rem;
+        gap: 0.25rem;
+        padding: 0 0.375rem;
+        border-radius: calc(var(--tt-ig-radius) - 3px);
+
+        > svg {
+            width: 0.875rem;
+            height: 0.875rem;
+        }
+    }
+
+    &[data-size='icon-xs'] {
+        width: 1.5rem;
+        min-width: auto;
+        height: 1.5rem;
+        padding: 0;
+        border-radius: calc(var(--tt-ig-radius) - 3px);
+    }
+
+    &[data-size='icon-sm'] {
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Text
+   ----------------------------------------------------------------------------- */
+
+.tiptap-input-group-text {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--tt-ig-addon-color);
+
+    svg {
+        width: 1rem;
+        height: 1rem;
+        pointer-events: none;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Control
+
+   The input or textarea inside the frame. It drops its own border, radius,
+   and focus treatment because the frame draws those.
+   ----------------------------------------------------------------------------- */
+
+.tiptap-input-group-control {
+    flex: 1;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
+
+    &:focus-visible,
+    &[aria-invalid='true'],
+    &:disabled {
+        background: transparent;
+        box-shadow: none;
+    }
+}
+
+textarea.tiptap-input-group-control {
+    padding-block: 0.5rem;
+    resize: none;
+}

@@ -1,0 +1,64 @@
+:root {
+    --tt-segmented-control-bg: var(--tt-gray-light-a-100);
+    --tt-segmented-control-active-bg: var(--white);
+    --tt-segmented-control-text-color: var(--tt-gray-light-a-500);
+    --tt-segmented-control-active-text-color: var(--tt-gray-light-a-900);
+    --tt-segmented-control-active-shadow:
+        0 0.54px 1.49px rgb(0 0 0 / 2%), 0 1.5px 4.13px rgb(0 0 0 / 3%);
+}
+
+.dark {
+    --tt-segmented-control-bg: var(--tt-gray-dark-a-100);
+    --tt-segmented-control-active-bg: var(--black);
+    --tt-segmented-control-text-color: var(--tt-gray-dark-a-600);
+    --tt-segmented-control-active-text-color: var(--tt-gray-dark-a-900);
+}
+
+.tiptap-button-group.tiptap-segmented-control {
+    gap: 0.125rem;
+    padding: 0.125rem;
+    border-radius: var(--tt-radius-lg);
+    background-color: var(--tt-segmented-control-bg);
+}
+
+.tiptap-button-group.tiptap-segmented-control > .tiptap-button {
+    --tt-button-default-icon-color: currentColor;
+    --tt-button-hover-icon-color: currentColor;
+    --tt-button-active-icon-color: currentColor;
+    --tt-button-active-hover-icon-color: currentColor;
+
+    flex-shrink: 0;
+    white-space: nowrap;
+    background-color: transparent;
+    color: var(--tt-segmented-control-text-color);
+}
+
+.tiptap-button-group.tiptap-segmented-control
+    > .tiptap-button[data-size='small'] {
+    font-size: 0.6875rem;
+}
+
+.tiptap-button-group.tiptap-segmented-control
+    > .tiptap-button:hover:not(:disabled) {
+    color: var(--tt-segmented-control-active-text-color);
+}
+
+.tiptap-button-group.tiptap-segmented-control
+    > .tiptap-button:is(
+        [data-active='true'],
+        [aria-pressed='true'],
+        [aria-selected='true']
+    ) {
+    background-color: var(--tt-segmented-control-active-bg);
+    color: var(--tt-segmented-control-active-text-color);
+    box-shadow: var(--tt-segmented-control-active-shadow);
+}
+
+.tiptap-button-group.tiptap-segmented-control > .tiptap-button:focus-visible {
+    outline: 2px solid var(--tt-brand-color-500);
+    outline-offset: 2px;
+}
+
+.tiptap-button-group.tiptap-segmented-control > .tiptap-button:disabled {
+    color: var(--tt-button-disabled-text-color);
+}

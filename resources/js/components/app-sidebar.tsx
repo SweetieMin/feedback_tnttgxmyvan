@@ -1,5 +1,14 @@
-import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import {
+    BookOpen,
+    FolderGit2,
+    Inbox,
+    LayoutGrid,
+    ListChecks,
+    MessageSquareText,
+    Tags,
+    Users,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -14,15 +23,57 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
-import type { NavItem } from '@/types';
+import { index as adminCategoriesIndex } from '@/routes/admin/categories';
+import { index as adminFeedbackIndex } from '@/routes/admin/feedback';
+import { index as adminUsersIndex } from '@/routes/admin/users';
+import { index as feedbackIndex } from '@/routes/feedback';
+import { index as queueIndex } from '@/routes/queue';
+import type { NavItem, UserRole } from '@/types';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
+function mainNavItems(role: UserRole): NavItem[] {
+    const items: NavItem[] = [
+        {
+            title: 'Dashboard',
+            href: dashboard(),
+            icon: LayoutGrid,
+        },
+        {
+            title: 'Góp ý của tôi',
+            href: feedbackIndex(),
+            icon: MessageSquareText,
+        },
+    ];
+
+    if (role === 'handler') {
+        items.push({
+            title: 'Hàng đợi xử lý',
+            href: queueIndex(),
+            icon: Inbox,
+        });
+    }
+
+    if (role === 'admin') {
+        items.push(
+            {
+                title: 'Tất cả góp ý',
+                href: adminFeedbackIndex(),
+                icon: ListChecks,
+            },
+            {
+                title: 'Danh mục',
+                href: adminCategoriesIndex(),
+                icon: Tags,
+            },
+            {
+                title: 'Người dùng & vai trò',
+                href: adminUsersIndex(),
+                icon: Users,
+            },
+        );
+    }
+
+    return items;
+}
 
 const footerNavItems: NavItem[] = [
     {
@@ -38,6 +89,8 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const { auth } = usePage().props;
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -53,7 +106,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={mainNavItems(auth.user.role)} />
             </SidebarContent>
 
             <SidebarFooter>

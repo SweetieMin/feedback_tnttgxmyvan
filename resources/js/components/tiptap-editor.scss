@@ -1,0 +1,115 @@
+// Nhúng editor của template "Simple Editor" vào trong form thay vì toàn trang.
+.feedback-editor {
+    --tt-toolbar-height: 44px;
+
+    .tiptap-toolbar[data-variant='fixed'] {
+        border-top-left-radius: inherit;
+        border-top-right-radius: inherit;
+    }
+
+    // Template đẩy toolbar xuống đáy màn hình trên điện thoại (editor toàn
+    // trang); trong form thì giữ toolbar dính phía trên ô soạn.
+    @media (max-width: 480px) {
+        .tiptap-toolbar[data-variant='fixed'] {
+            position: sticky;
+            top: 0;
+            height: auto;
+            border-top: none;
+            border-bottom: 1px solid var(--tt-toolbar-border-color);
+            padding: 0 0.5rem;
+        }
+    }
+
+    .tiptap.ProseMirror {
+        min-height: 10rem;
+        padding: 0.75rem 1rem 1.25rem;
+        outline: none;
+    }
+
+    .tiptap-resizable-image {
+        margin: 2rem 0;
+        text-align: left;
+
+        &[data-align='center'] {
+            text-align: center;
+        }
+
+        &[data-align='right'] {
+            text-align: right;
+        }
+
+        &.ProseMirror-selectednode .tiptap-resizable-image-frame {
+            outline: 2px solid var(--tt-brand-color-500);
+        }
+    }
+
+    .tiptap-resizable-image-frame {
+        position: relative;
+        display: inline-block;
+        max-width: 100%;
+        vertical-align: top;
+    }
+
+    .tiptap-resizable-image img {
+        border-radius: var(--tt-radius-xs, 0.25rem);
+    }
+
+    .tiptap-image-resize-handle {
+        position: absolute;
+        top: 50%;
+        display: grid;
+        width: 1.25rem;
+        height: min(3.5rem, 100%);
+        place-items: center;
+        border-radius: 0.25rem;
+        cursor: ew-resize;
+        touch-action: none;
+        transform: translateY(-50%);
+
+        &[data-side='left'] {
+            left: 0;
+        }
+
+        &[data-side='right'] {
+            right: 0;
+        }
+
+        &::before {
+            width: 0.375rem;
+            height: min(3rem, 90%);
+            border-radius: 9999px;
+            background: var(--tt-brand-color-500);
+            content: '';
+        }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+        .tiptap-image-resize-handle {
+            opacity: 0;
+        }
+
+        .tiptap-resizable-image-frame:hover .tiptap-image-resize-handle,
+        .tiptap-resizable-image-frame:focus-within .tiptap-image-resize-handle,
+        .ProseMirror-selectednode .tiptap-image-resize-handle {
+            opacity: 1;
+        }
+    }
+}
+
+.tiptap-viewer .tiptap.ProseMirror {
+    outline: none;
+
+    // Chỉ-đọc: ProseMirror vẫn "chọn" node đầu tiên (vd. một ảnh) nên template
+    // vẽ viền chọn — không có ý nghĩa khi không soạn được.
+    .ProseMirror-selectednode {
+        outline: none;
+    }
+
+    > :first-child {
+        margin-top: 0;
+    }
+
+    > :last-child {
+        margin-bottom: 0;
+    }
+}

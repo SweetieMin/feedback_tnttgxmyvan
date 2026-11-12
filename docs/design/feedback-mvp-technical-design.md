@@ -19,7 +19,7 @@ Stack: Laravel 13 (Inertia.js) + React 19 + Tiptap, trên nền **Laravel React 
 | A3 | Nội dung Tiptap là nguồn dữ liệu gốc duy nhất (JSON), không lưu thêm bản HTML. Hiển thị luôn qua Tiptap renderer phía React (schema-based), không `dangerouslySetInnerHTML` với HTML tự tạo. | Tránh phải xây dựng và duy trì một bộ HTML sanitizer riêng; ProseMirror schema của Tiptap tự giới hạn cấu trúc DOM được sinh ra. |
 | A4 | Ghi chú nội bộ không phải bảng riêng mà là cột `visibility` (`public`/`internal`) trên bảng trao đổi (`feedback_messages`). | Đơn giản hơn 2 bảng riêng, vẫn đủ để lọc ở tầng query. |
 | A5 | Lịch sử xử lý (chuyển trạng thái + đổi người phụ trách + mở lại) hợp nhất trong **một** bảng `feedback_activities`, không tách nhiều bảng lịch sử. | Một nguồn duy nhất cho timeline hiển thị và cho tính chỉ số dashboard theo thời gian. |
-| A6 | Thông báo trong ứng dụng là bản ghi DB (`notifications`), không có bảng góp ý công khai hay real-time/WebSocket; người dùng thấy thông báo mới khi Inertia tải lại trang (poll nhẹ ở header, ví dụ mỗi 30–60s hoặc khi điều hướng). | Ngoài phạm vi MVP, tránh thêm hạ tầng broadcast. |
+| A6 | Thông báo trong ứng dụng là bản ghi DB (`feedback_notifications` — đặt tên khác bảng `notifications` chuẩn của Laravel để tránh đụng schema UUID/morph mà `Notifiable` trait có thể tạo), không có bảng góp ý công khai hay real-time/WebSocket; người dùng thấy thông báo mới khi Inertia tải lại trang (poll nhẹ ở header, ví dụ mỗi 30–60s hoặc khi điều hướng). | Ngoài phạm vi MVP, tránh thêm hạ tầng broadcast; tránh xung đột tên bảng với hệ thống notification có sẵn của Laravel. |
 | A7 | DB là MySQL (theo `.env` hiện tại của repo) — dùng kiểu cột `JSON` chuẩn MySQL 8, không phải JSONB của Postgres. | Khớp hạ tầng thực tế của dự án. |
 | A8 | Dashboard tính trực tiếp bằng aggregate query trên bảng chính, không có bảng tổng hợp (materialized) riêng. | Quy mô dữ liệu nội bộ MVP còn nhỏ, chưa cần pre-aggregate. |
 | A9 | Time bucket "theo tuần" dùng tuần ISO (Thứ 2 → Chủ nhật) theo timezone ứng dụng (`config('app.timezone')`, đề xuất đặt `Asia/Ho_Chi_Minh`). | Cần một quy ước cố định để đối chiếu số liệu, tránh lệch theo UTC. |
@@ -54,7 +54,7 @@ sequenceDiagram
     U->>R: POST /feedback/{id}/assign (useForm submit)
     R->>C: FeedbackAssignmentController@store
     C->>S: FeedbackStatusService::selfAssign() (transaction + lock)
-    S->>D: UPDATE feedbacks, INSERT feedback_activities, INSERT notifications
+    S->>D: UPDATE feedbacks, INSERT feedback_activities, INSERT feedback_notifications
     D-->>C: OK/Conflict
     C-->>U: redirect()->back()->with('flash') → Inertia cập nhật props + toast (sonner)
 ```
@@ -91,11 +91,12 @@ Quy ước đặt tên theo đúng convention hiện có của repo (`routes/set
 | GET | `/feedback/{feedback}` | `FeedbackController@show` | route param | `FeedbackPolicy@view` | Inertia `feedback/show` — props lọc theo vai trò (internal note ẩn với employee) |
 | PATCH | `/feedback/{feedback}` | `FeedbackController@update` | `title?`, `content?`, `category_id?` | `FeedbackPolicy@update` (chủ sở hữu + status=new) | Cập nhật nội dung gốc, redirect back |
 | GET | `/queue` | `QueueController@index` | query: `status?`, `assignee?`, `category_id?` | middleware `role:handler,admin` | Inertia `feedback/queue` |
-| POST | `/feedback/{feedback}/self-assign` | `FeedbackAssignmentController@selfAssign` | — | `FeedbackPolicy@selfAssign` (role handler, chưa có assignee) | `assigned_to=self`, `status=reviewing`, ghi activity, redirect back |
+| POST | `/feedback/{feedback}/self-assign` | `FeedbackAssignmentController@selfAssign` | — | role handler (403 nếu không phải handler); góp ý đã có người nhận / không còn `new` → lỗi `conflict` từ service, không phải 403. `FeedbackPolicy@selfAssign` chỉ quyết định có hiện nút hay không | `assigned_to=self`, `status=reviewing`, ghi activity, redirect back |
 | PATCH | `/feedback/{feedback}/assignee` | `FeedbackAssignmentController@reassign` | `assigned_to` | `FeedbackPolicy@reassign` (role admin) | Đổi người phụ trách, ghi activity + notification cho handler mới |
 | PATCH | `/feedback/{feedback}/status` | `FeedbackStatusController@update` | `to_status`, `reason?` (bắt buộc khi `closed`) | `FeedbackPolicy@changeStatus` | Chuyển trạng thái theo bảng mục 3 (3.1), transaction + lock |
-| POST | `/feedback/{feedback}/reopen` | `FeedbackStatusController@reopen` | `reason` | `FeedbackPolicy@reopen` | `resolved/closed → reviewing`, `reopened_count++`, notification |
+| POST | `/feedback/{feedback}/reopen` | `FeedbackStatusController@reopen` | `reason` | `FeedbackPolicy@reopen` | `resolved → in_progress`, `closed → reviewing` (theo bảng 3.1), `reopened_count++`, notification |
 | POST | `/feedback/{feedback}/messages` | `FeedbackMessageController@store` | `body` (Tiptap JSON), `visibility` (`public` mặc định cho employee; `public`/`internal` cho handler/admin) | `FeedbackMessagePolicy@create` | Thêm trao đổi, set `first_response_at` nếu là reply công khai đầu tiên của handler, notification |
+| POST | `/feedback-images` | `FeedbackImageController@store` | `image` (file JPG/PNG/GIF/WebP ≤ 5 MB) | auth, `throttle:30,1` | **JSON** `{url}` (201) — ảnh chèn trong trình soạn góp ý, xem mục 2.3 |
 | GET | `/admin/categories` | `CategoryController@index` | — | middleware `role:admin` | Inertia `admin/categories` |
 | POST | `/admin/categories` | `CategoryController@store` | `name` | `role:admin` | Tạo danh mục |
 | PATCH | `/admin/categories/{category}` | `CategoryController@update` | `name?`, `is_active?` | `role:admin` | Sửa/kích hoạt-ẩn danh mục |
@@ -161,7 +162,7 @@ erDiagram
         string to_value "nullable"
         string note "nullable"
     }
-    NOTIFICATIONS {
+    FEEDBACK_NOTIFICATIONS {
         bigint id PK
         bigint user_id FK "người nhận"
         bigint feedback_id FK "nullable"
@@ -177,8 +178,8 @@ erDiagram
     USERS ||--o{ FEEDBACK_MESSAGES : "viết"
     FEEDBACKS ||--o{ FEEDBACK_ACTIVITIES : "có lịch sử"
     USERS ||--o{ FEEDBACK_ACTIVITIES : "thực hiện"
-    USERS ||--o{ NOTIFICATIONS : "nhận"
-    FEEDBACKS ||--o{ NOTIFICATIONS : "liên quan đến"
+    USERS ||--o{ FEEDBACK_NOTIFICATIONS : "nhận"
+    FEEDBACKS ||--o{ FEEDBACK_NOTIFICATIONS : "liên quan đến"
 ```
 
 ### 2.2 Bảng schema chi tiết
@@ -242,7 +243,7 @@ erDiagram
 | `note` | string(255) | có | — | lý do đóng/mở lại nếu có |
 | `created_at` | timestamp | — | index | không có `updated_at` (immutable) |
 
-**`notifications`**
+**`feedback_notifications`**
 
 | Cột | Kiểu | Null | Khoá/Chỉ mục | Ghi chú |
 |---|---|---|---|---|
@@ -258,7 +259,8 @@ erDiagram
 
 - **Cấu trúc**: bắt buộc `{"type":"doc","content":[...]}`; validate bằng một `Rule` object tuỳ biến (`App\Rules\ValidTiptapDocument`), nhận tham số `profile` (`feedback` hoặc `message`) để áp whitelist khác nhau.
 - **Whitelist node/mark**:
-  - Profile `feedback` (nội dung góp ý chính): node `paragraph, heading(level 1-3), bulletList, orderedList, listItem, blockquote, codeBlock, hardBreak, text`; mark `bold, italic, underline, strike, code, link`.
+  - Profile `feedback` (nội dung góp ý chính): node `paragraph, heading(level 1-3), bulletList, orderedList, listItem, blockquote, codeBlock, hardBreak, text, image`; mark `bold, italic, underline, strike, code, link`.
+  - Node `image` (chỉ profile `feedback`): attrs chỉ được gồm `src, alt, title, width, height`; `src` bắt buộc khớp đúng dạng đường dẫn do endpoint upload trả về (`/storage/feedback-images/<tên ngẫu nhiên>.<jpg|jpeg|png|gif|webp>`) — chặn ảnh từ host ngoài (pixel theo dõi), `data:`, `javascript:`, SVG; `alt/title` ≤ 255 ký tự; `width/height` là số nguyên 1–4000 hoặc null. Ảnh được tải lên trước qua `POST /feedback-images` (JPG/PNG/GIF/WebP ≤ 5 MB, giới hạn 30 lần/phút/người), lưu ở disk `public`.
   - Profile `message` (trao đổi/ghi chú): tập hẹp hơn — node `paragraph, bulletList, listItem, hardBreak, text`; mark `bold, italic, link` — đủ cho trả lời ngắn, giảm diện tích rủi ro.
   - Node/mark/attrs ngoài whitelist → **từ chối toàn bộ request** (422), không âm thầm loại bỏ, để người dùng biết và soạn lại.
 - **Kiểm soát URL**: mark `link` chỉ nhận `attrs.href` có scheme `http`, `https`, `mailto`; từ chối `javascript:`, `data:`, hoặc thiếu scheme hợp lệ. Khi hiển thị, Tiptap `Link` extension được cấu hình `protocols: ['http','https','mailto']`, tự thêm `rel="noopener noreferrer nofollow" target="_blank"`.
@@ -300,11 +302,11 @@ Quy tắc khác:
 
 1. Nhân viên gửi góp ý → `feedbacks` tạo với `status=new`, không tạo thông báo hàng loạt cho mọi handler (hàng đợi tự hiển thị theo query `status=new`), chỉ ghi 1 dòng `feedback_activities(type=status_change, from=null, to=new)`.
 2. Handler vào `/queue`, tự nhận → transaction: `UPDATE feedbacks SET assigned_to, status=reviewing` + `INSERT feedback_activities` + **không** notify người gửi ở bước này (chưa có gì đáng báo).
-3. Handler bắt đầu xử lý (`in_progress`) → ghi activity; tuỳ chọn gửi `notifications` cho người gửi loại `status_changed` ("Góp ý của bạn đang được xử lý") — bật/tắt được, mặc định **có** gửi vì đây là cập nhật có ý nghĩa với người gửi.
-4. Handler trả lời công khai (message `visibility=public`) → nếu là lần đầu, set `first_response_at = now()`; luôn tạo `notifications(type=new_reply)` cho người gửi.
-5. Handler đánh dấu `resolved` (kèm reply cuối nếu chưa có) → ghi activity `to_value=resolved`, set `resolved_at=now()`, tạo `notifications(type=status_changed)` cho người gửi.
+3. Handler bắt đầu xử lý (`in_progress`) → ghi activity; tuỳ chọn ghi `feedback_notifications` cho người gửi loại `status_changed` ("Góp ý của bạn đang được xử lý") — bật/tắt được, mặc định **có** gửi vì đây là cập nhật có ý nghĩa với người gửi.
+4. Handler trả lời công khai (message `visibility=public`) → nếu là lần đầu, set `first_response_at = now()`; luôn ghi `feedback_notifications(type=new_reply)` cho người gửi.
+5. Handler đánh dấu `resolved` (kèm reply cuối nếu chưa có) → ghi activity `to_value=resolved`, set `resolved_at=now()`, ghi `feedback_notifications(type=status_changed)` cho người gửi.
 6. Nếu người gửi không hài lòng → `reopen` → ghi activity `type=reopened`, `reopened_count+1`, `status=in_progress`, notify handler đang phụ trách (và admin nếu không còn `assigned_to` do handler cũ đã bị đổi).
-7. Ghi chú nội bộ (`visibility=internal`) ở bất kỳ bước nào **không** sinh `notifications` cho người gửi, chỉ hiển thị trong timeline nội bộ cho handler/admin.
+7. Ghi chú nội bộ (`visibility=internal`) ở bất kỳ bước nào **không** ghi `feedback_notifications` cho người gửi, chỉ hiển thị trong timeline nội bộ cho handler/admin.
 
 ### 3.3 Nhất quán khi lỗi / hai người cùng cập nhật
 
@@ -312,7 +314,7 @@ Quy tắc khác:
   1. `Feedback::whereKey($id)->lockForUpdate()->first()` — khoá dòng.
   2. Kiểm tra trạng thái hiện tại còn khớp điều kiện chuyển tiếp mong đợi (optimistic check dựa trên `status`/`assigned_to` đọc được **trong** transaction, không dựa vào giá trị đã đọc trước đó ở request).
   3. Nếu không khớp (ví dụ handler khác đã nhận trước) → `throw FeedbackConflictException` → controller bắt, `redirect()->back()->withErrors(['conflict' => 'Góp ý vừa được người khác xử lý, vui lòng tải lại.'])`.
-  4. Nếu khớp → `UPDATE feedbacks`, `INSERT feedback_activities`, `INSERT notifications` cùng transaction — tất cả thành công hoặc tất cả rollback, không có trạng thái "nửa vời" (vd đổi status nhưng thiếu dòng lịch sử).
+  4. Nếu khớp → `UPDATE feedbacks`, `INSERT feedback_activities`, `INSERT feedback_notifications` cùng transaction — tất cả thành công hoặc tất cả rollback, không có trạng thái "nửa vời" (vd đổi status nhưng thiếu dòng lịch sử).
 - Nhờ `lockForUpdate()`, hai handler bấm "Nhận xử lý" gần như đồng thời: người thứ 2 bị khoá chờ ngắn rồi đọc được `assigned_to` đã có → nhận lỗi conflict thay vì ghi đè.
 
 ---
@@ -373,7 +375,7 @@ Quy tắc khác:
 
 1. **Query-level**: mọi nơi build prop `messages` cho Inertia đều áp `->where('visibility','public')` khi viewer là `employee` — thực hiện ở Eloquent, dữ liệu `internal` không bao giờ được serialize vào response HTML gửi cho browser của employee (khác với chỉ ẩn bằng CSS/JS).
 2. **Lịch sử hiển thị**: `feedback_activities` chỉ chứa `status_change`/`assignment_change`/`reopened` — các loại này được xem là **metadata vận hành công khai** (employee cần biết góp ý của mình đang ở trạng thái gì, ai đang xử lý — MVP chọn **hiện** tên handler phụ trách cho minh bạch, có thể đổi sau); nội dung tự do (ghi chú) không bao giờ nằm trong bảng này nên không có đường lộ qua timeline.
-3. **Thông báo**: service tạo `notifications` cho message chỉ được gọi trong nhánh `visibility=public` của `FeedbackMessageController@store`; nhánh `internal` kết thúc sau khi `INSERT feedback_messages`, không có bước tạo notification cho người gửi.
+3. **Thông báo**: service ghi `feedback_notifications` cho message chỉ được gọi trong nhánh `visibility=public` của `FeedbackMessageController@store`; nhánh `internal` kết thúc sau khi `INSERT feedback_messages`, không có bước tạo notification cho người gửi.
 4. **Kiểm thử hồi quy**: thêm test Pest/PHPUnit `test_employee_cannot_see_internal_notes` gửi request như employee, assert response Inertia props không chứa chuỗi nội dung ghi chú nội bộ đã tạo trước đó bằng handler.
 
 ---
@@ -424,13 +426,13 @@ Click-through: mọi số liệu/điểm chart đều là Inertia `Link` kèm qu
 
 | # | Việc | Phụ thuộc | Có thể làm song song với |
 |---|---|---|---|
-| 1 | Migration + model: `users.role`, `categories`, `feedbacks`, `feedback_messages`, `feedback_activities`, `notifications`; factory/seeder demo | — | — |
+| 1 | Migration + model: `users.role`, `categories`, `feedbacks`, `feedback_messages`, `feedback_activities`, `feedback_notifications`; factory/seeder demo | — | — |
 | 2 | `EnsureUserRole` middleware (alias `role`), các Policy (`FeedbackPolicy`, `FeedbackMessagePolicy`, `CategoryPolicy`), `App\Rules\ValidTiptapDocument` | 1 | — |
 | 3 | Thêm Tiptap (`@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-link`) + chạy `npx shadcn@latest add table tabs textarea popover badge calendar command chart` theo `components.json` hiện có; dựng `TiptapEditor`/`TiptapViewer` dùng chung | — | 1, 2 |
 | 4 | `CategoryController` (admin CRUD) | 2 | 5 |
 | 5 | `FeedbackController` (employee: create/index/show/update khi `new`) + `excerpt` generator | 2 | 4 |
 | 6 | `FeedbackStatusService` + `QueueController` + `FeedbackAssignmentController` + `FeedbackStatusController` (self-assign, chuyển trạng thái, đóng, mở lại, reassign) | 5 | — |
-| 7 | `FeedbackMessageController` (trả lời công khai/ghi chú nội bộ) + tạo `notifications` | 6 | — |
+| 7 | `FeedbackMessageController` (trả lời công khai/ghi chú nội bộ) + ghi `feedback_notifications` | 6 | — |
 | 8 | `NotificationController` (list, unread-count, mark-read) | 7 | 9 |
 | 9 | `UserRoleController` (admin đổi vai trò) | 2 | 8 |
 | 10 | `DashboardController` (3 query theo vai trò, mục 5) | 6, 7 | — |
@@ -443,17 +445,19 @@ Click-through: mọi số liệu/điểm chart đều là Inertia `Link` kèm qu
 
 ### 6.2 Tiêu chí nghiệm thu
 
-- [ ] Nhân viên gửi góp ý hợp lệ (tiêu đề + Tiptap content + danh mục) → xuất hiện ngay trong `/feedback` với `status=new`.
-- [ ] Gửi content Tiptap chứa node/mark ngoài whitelist (ví dụ dán bảng, ảnh) hoặc `href` kiểu `javascript:` → bị từ chối với lỗi rõ ràng, **không** được lưu.
-- [ ] Handler A tự nhận một góp ý `new` → trạng thái thành `reviewing`, `assigned_to=A`; handler B thử tự nhận cùng góp ý (ngay sau, kể cả gọi thẳng route) → nhận lỗi conflict, dữ liệu không đổi thêm lần nữa.
-- [ ] Chuyển trạng thái đúng theo bảng 3.1; thử gọi trực tiếp route chuyển `new → resolved` (bỏ qua UI) → 403/422, DB không đổi.
-- [ ] Đóng góp ý không gửi `closed_reason` → bị chặn validate; đóng thành công → `closed_at` được set và xuất hiện trong lịch sử.
-- [ ] Handler ghi 1 ghi chú nội bộ trên một góp ý → đăng nhập là nhân viên sở hữu góp ý đó, mở `/feedback/{id}`: props Inertia, HTML response và mọi thông báo liên quan **không chứa** nội dung ghi chú đó (kiểm bằng cách grep response body).
-- [ ] Nhân viên B truy cập trực tiếp `/feedback/{id}` của nhân viên A → nhận 403 (không phải trang trắng hay redirect im lặng).
-- [ ] Handler thường gọi route đổi `assigned_to` của góp ý **không** do mình phụ trách → 403; admin gọi cùng route → thành công, handler mới nhận được `notifications`.
-- [ ] Trên dashboard admin, số "Góp ý mới" khớp chính xác số dòng trả về khi bấm vào mở `/admin/feedback?status=new` tại cùng thời điểm (không lệch do cache).
-- [ ] Trong khoảng thời gian chưa có góp ý nào được giải quyết, "Thời gian đến giải quyết" hiển thị "Chưa có dữ liệu" (không phải `0` hay lỗi JS).
-- [ ] Mở lại một góp ý `resolved` rồi giải quyết lại trong tuần khác → dashboard "Xu hướng theo tuần" ghi nhận 2 lần giải quyết ở 2 tuần tương ứng.
+- [x] Nhân viên gửi góp ý hợp lệ (tiêu đề + Tiptap content + danh mục) → xuất hiện ngay trong `/feedback` với `status=new`.
+- [x] Gửi content Tiptap chứa node/mark ngoài whitelist (ví dụ dán bảng, ảnh) hoặc `href` kiểu `javascript:` → bị từ chối với lỗi rõ ràng, **không** được lưu.
+- [x] Handler A tự nhận một góp ý `new` → trạng thái thành `reviewing`, `assigned_to=A`; handler B thử tự nhận cùng góp ý (ngay sau, kể cả gọi thẳng route) → nhận lỗi conflict, dữ liệu không đổi thêm lần nữa.
+- [x] Chuyển trạng thái đúng theo bảng 3.1; thử gọi trực tiếp route chuyển `new → resolved` (bỏ qua UI) → 403/422, DB không đổi.
+- [x] Đóng góp ý không gửi `closed_reason` → bị chặn validate; đóng thành công → `closed_at` được set và xuất hiện trong lịch sử.
+- [x] Handler ghi 1 ghi chú nội bộ trên một góp ý → đăng nhập là nhân viên sở hữu góp ý đó, mở `/feedback/{id}`: props Inertia, HTML response và mọi thông báo liên quan **không chứa** nội dung ghi chú đó (kiểm bằng cách grep response body).
+- [x] Nhân viên B truy cập trực tiếp `/feedback/{id}` của nhân viên A → nhận 403 (không phải trang trắng hay redirect im lặng).
+- [x] Handler thường gọi route đổi `assigned_to` của góp ý **không** do mình phụ trách → 403; admin gọi cùng route → thành công, handler mới nhận được bản ghi `feedback_notifications`.
+- [x] Trên dashboard admin, số "Góp ý mới" khớp chính xác số dòng trả về khi bấm vào mở `/admin/feedback?status=new` tại cùng thời điểm (không lệch do cache).
+- [x] Trong khoảng thời gian chưa có góp ý nào được giải quyết, "Thời gian đến giải quyết" hiển thị "Chưa có dữ liệu" (không phải `0` hay lỗi JS).
+- [x] Mở lại một góp ý `resolved` rồi giải quyết lại trong tuần khác → dashboard "Xu hướng theo tuần" ghi nhận 2 lần giải quyết ở 2 tuần tương ứng.
+
+> Mỗi tiêu chí trên có một test tự động tương ứng (đánh số `test_01` … `test_11`) trong `tests/Feature/AcceptanceCriteriaTest.php`, chạy qua HTTP như người dùng thật. Tiêu chí "→ 403/422" ở dòng thứ tư được đáp ứng dưới dạng lỗi `conflict` trả về trang (redirect kèm lỗi, chuẩn Inertia cho lỗi nghiệp vụ), DB không đổi.
 
 ---
 

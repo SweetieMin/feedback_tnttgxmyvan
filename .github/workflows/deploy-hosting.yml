@@ -1,0 +1,122 @@
+name: Deploy to hosting
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosting-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      APP_ENV: production
+      APP_DEBUG: 'false'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.11'
+          cache: npm
+
+      - name: Install production PHP dependencies
+        run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Build frontend
+        run: |
+          npm ci --include=dev
+          npm run build
+
+      - name: Package release
+        run: |
+          release_dir="$RUNNER_TEMP/hosting-release"
+          mkdir -p "$release_dir"
+          git archive --format=tar HEAD | tar -xf - -C "$release_dir"
+          cp -a vendor "$release_dir/"
+          cp -a public/build "$release_dir/public/"
+
+          test -f "$release_dir/vendor/autoload.php"
+          test -f "$release_dir/public/build/manifest.json"
+          test ! -e "$release_dir/.env"
+          test ! -e "$release_dir/public/hot"
+          tar -czf "$RUNNER_TEMP/feedback-${GITHUB_SHA::8}.tar.gz" -C "$release_dir" .
+
+      - name: Deploy over SSH
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          PHP_BINARY: ${{ vars.DEPLOY_PHP_BINARY || 'php' }}
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Set DEPLOY_HOST}"
+          : "${SSH_USER:?Set DEPLOY_USER}"
+          : "${SSH_PRIVATE_KEY:?Set DEPLOY_SSH_KEY}"
+          : "${SSH_KNOWN_HOSTS:?Set DEPLOY_KNOWN_HOSTS}"
+          [[ "$DEPLOY_PATH" =~ ^/[[:alnum:]_./-]+$ ]] || {
+            echo "Set DEPLOY_PATH to the absolute application directory."
+            exit 1
+          }
+          [[ "$PHP_BINARY" =~ ^[[:alnum:]_./-]+$ ]] || exit 1
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || exit 1
+
+          umask 077
+          key_file="$RUNNER_TEMP/hosting_key"
+          known_hosts="$RUNNER_TEMP/hosting_known_hosts"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$key_file"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$known_hosts"
+
+          ssh_options=(
+            -i "$key_file"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$known_hosts"
+            -o "Port=$SSH_PORT"
+          )
+          host="$SSH_USER@$SSH_HOST"
+          remote_dir="$(ssh "${ssh_options[@]}" -- "$host" 'mktemp -d')"
+          [[ "$remote_dir" =~ ^/[[:alnum:]_./-]+$ ]] || exit 1
+          trap 'ssh "${ssh_options[@]}" -- "$host" "rm -f -- $remote_dir/release.tar.gz && rmdir -- $remote_dir" || true' EXIT
+
+          scp "${ssh_options[@]}" -- "$RUNNER_TEMP/feedback-${GITHUB_SHA::8}.tar.gz" "$host:$remote_dir/release.tar.gz"
+          ssh "${ssh_options[@]}" -- "$host" "bash -s -- '$DEPLOY_PATH' '$PHP_BINARY' '$remote_dir/release.tar.gz'" <<'REMOTE'
+          set -euo pipefail
+          app_dir="$1"
+          php_binary="$2"
+          archive="$3"
+          cd "$app_dir"
+          test -f .env || { echo "Configure the production .env before deploying."; exit 1; }
+          "$php_binary" -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'
+          tar -xzf "$archive" --no-same-owner -C "$app_dir"
+
+          "$php_binary" artisan config:clear
+          "$php_binary" artisan migrate --force
+          if [[ ! -e public/storage && ! -L public/storage ]]; then
+            "$php_binary" artisan storage:link
+          fi
+          "$php_binary" artisan optimize
+          REMOTE
