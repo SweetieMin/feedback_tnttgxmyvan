@@ -1,62 +1,68 @@
-// Components
 import { Form, Head } from '@inertiajs/react';
-import { LoaderCircle } from 'lucide-react';
+import { ArrowLeft, MailCheck, Send } from 'lucide-react';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { login } from '@/routes';
 import { email } from '@/routes/password';
 
 export default function ForgotPassword({ status }: { status?: string }) {
     return (
         <>
-            <Head title="Forgot password" />
+            <Head title="Quên mật khẩu" />
 
-            {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    {status}
-                </div>
-            )}
-
-            <div className="space-y-6">
-                <Form {...email.form()}>
+            <div className="grid gap-5">
+                {status && (
+                    <Alert role="status" className="border-primary/20 bg-primary/5">
+                        <MailCheck className="text-primary" />
+                        <AlertTitle>Kiểm tra hộp thư của bạn</AlertTitle>
+                        <AlertDescription>
+                            Mở liên kết đặt lại mật khẩu trong email. Nếu chưa
+                            thấy thư, hãy kiểm tra mục thư rác.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                <Form {...email.form()} className="grid gap-4">
                     {({ processing, errors }) => (
                         <>
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
+                                <Label htmlFor="email">Email tài khoản</Label>
                                 <Input
                                     id="email"
                                     type="email"
                                     name="email"
-                                    autoComplete="off"
+                                    autoComplete="email"
                                     autoFocus
+                                    required
+                                    aria-invalid={Boolean(errors.email)}
                                     placeholder="email@example.com"
                                 />
 
                                 <InputError message={errors.email} />
                             </div>
 
-                            <div className="my-6 flex items-center justify-start">
-                                <Button
-                                    className="w-full"
-                                    disabled={processing}
-                                    data-test="email-password-reset-link-button"
-                                >
-                                    {processing && (
-                                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                                    )}
-                                    Email password reset link
-                                </Button>
-                            </div>
+                            <Button
+                                type="submit"
+                                className="w-full"
+                                disabled={processing}
+                                data-test="email-password-reset-link-button"
+                            >
+                                {processing ? <Spinner /> : <Send aria-hidden="true" />}
+                                {status ? 'Gửi lại liên kết' : 'Gửi liên kết đặt lại mật khẩu'}
+                            </Button>
                         </>
                     )}
                 </Form>
 
-                <div className="space-x-1 text-center text-sm text-muted-foreground">
-                    <span>Or, return to</span>
-                    <TextLink href={login()}>log in</TextLink>
+                <div className="text-center text-sm">
+                    <TextLink href={login()} className="inline-flex items-center gap-2">
+                        <ArrowLeft className="size-4" aria-hidden="true" />
+                        Quay lại đăng nhập
+                    </TextLink>
                 </div>
             </div>
         </>
@@ -64,6 +70,6 @@ export default function ForgotPassword({ status }: { status?: string }) {
 }
 
 ForgotPassword.layout = {
-    title: 'Forgot password',
-    description: 'Enter your email to receive a password reset link',
+    title: 'Quên mật khẩu',
+    description: 'Nhập email đã dùng để đăng nhập cổng góp ý.',
 };
