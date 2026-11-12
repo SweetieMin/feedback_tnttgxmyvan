@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import {
     getExistingPushSubscription,
     isPushSupported,
@@ -45,9 +46,17 @@ export function usePushNotifications() {
             } else {
                 await subscribeToPush(vapidPublicKey);
                 setSubscribed(true);
+                toast.success('Đã bật thông báo đẩy trên thiết bị này.');
             }
-        } catch {
-            // Người dùng từ chối quyền hoặc trình duyệt chặn — giữ nguyên trạng thái cũ.
+        } catch (error) {
+            // Người dùng từ chối quyền, trình duyệt chặn, hoặc server không
+            // lưu được subscription — báo rõ thay vì im lặng để không tưởng
+            // nhầm là đã bật thành công.
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : 'Không bật được thông báo đẩy.',
+            );
         } finally {
             setLoading(false);
         }

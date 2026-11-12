@@ -65,7 +65,7 @@ export async function subscribeToPush(
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
     });
 
-    await fetch(PushSubscriptionController.store.url(), {
+    const response = await fetch(PushSubscriptionController.store.url(), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -75,6 +75,15 @@ export async function subscribeToPush(
         body: JSON.stringify(subscription.toJSON()),
         credentials: 'same-origin',
     });
+
+    if (!response.ok) {
+        // Lưu thất bại phía server (CSRF hết hạn, lỗi 500...) — huỷ luôn
+        // subscription vừa tạo ở trình duyệt để không báo "đã bật" sai sự thật.
+        await subscription.unsubscribe();
+        throw new Error(
+            `Không lưu được đăng ký nhận thông báo (HTTP ${response.status}).`,
+        );
+    }
 
     return subscription;
 }
