@@ -37,6 +37,110 @@ class QueueControllerTest extends TestCase
             );
     }
 
+    public function test_queue_is_split_into_open_resolved_and_closed_tabs(): void
+    {
+        $handler = User::factory()->create(['role' => UserRole::Handler]);
+        Feedback::factory()->create(['status' => FeedbackStatus::New]);
+        Feedback::factory()->create(['status' => FeedbackStatus::Reviewing]);
+        Feedback::factory()->create(['status' => FeedbackStatus::InProgress]);
+        $resolved = Feedback::factory()->create(['status' => FeedbackStatus::Resolved]);
+        $closed = Feedback::factory()->count(2)->create(['status' => FeedbackStatus::Closed]);
+
+        $counts = ['open' => 3, 'resolved' => 1, 'closed' => 2];
+
+        $this->actingAs($handler)
+            ->get(route('queue.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'open')
+                ->where('tabCounts', $counts)
+                ->has('feedbacks', 3)
+                ->where('feedbacks', fn ($feedbacks) => collect($feedbacks)
+                    ->pluck('status')
+                    ->diff(['new', 'reviewing', 'in_progress'])
+                    ->isEmpty()),
+            );
+
+        $this->actingAs($handler)
+            ->get(route('queue.index', ['tab' => 'resolved']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'resolved')
+                ->where('tabCounts', $counts)
+                ->has('feedbacks', 1)
+                ->where('feedbacks.0.id', $resolved->id),
+            );
+
+        $this->actingAs($handler)
+            ->get(route('queue.index', ['tab' => 'closed']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'closed')
+                ->has('feedbacks', 2)
+                ->where('feedbacks', fn ($feedbacks) => collect($feedbacks)
+                    ->pluck('id')
+                    ->diff($closed->pluck('id'))
+                    ->isEmpty()),
+            );
+    }
+
+    public function test_status_filter_picks_its_tab_and_is_ignored_outside_it(): void
+    {
+        $handler = User::factory()->create(['role' => UserRole::Handler]);
+        Feedback::factory()->create(['status' => FeedbackStatus::New]);
+        Feedback::factory()->create(['status' => FeedbackStatus::Reviewing]);
+        $closed = Feedback::factory()->create(['status' => FeedbackStatus::Closed]);
+
+        // Liên kết từ dashboard chỉ mang `status` — phải mở đúng tab.
+        $this->actingAs($handler)
+            ->get(route('queue.index', ['status' => 'closed']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'closed')
+                ->where('filters.status', 'closed')
+                ->has('feedbacks', 1)
+                ->where('feedbacks.0.id', $closed->id),
+            );
+
+        $this->actingAs($handler)
+            ->get(route('queue.index', ['status' => 'new']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'open')
+                ->has('feedbacks', 1)
+                ->where('feedbacks.0.status', 'new'),
+            );
+
+        // `status` lệch tab hoặc không hợp lệ thì bị bỏ qua.
+        $this->actingAs($handler)
+            ->get(route('queue.index', ['tab' => 'closed', 'status' => 'new']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'closed')
+                ->missing('filters.status')
+                ->has('feedbacks', 1)
+                ->where('feedbacks.0.id', $closed->id),
+            );
+
+        $this->actingAs($handler)
+            ->get(route('queue.index', ['tab' => 'bogus', 'status' => 'bogus']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'open')
+                ->missing('filters.status')
+                ->has('feedbacks', 2),
+            );
+    }
+
+    public function test_tab_counts_follow_assignee_and_category_filters(): void
+    {
+        $handler = User::factory()->create(['role' => UserRole::Handler]);
+        Feedback::factory()->create(['status' => FeedbackStatus::InProgress, 'assigned_to' => $handler->id]);
+        Feedback::factory()->create(['status' => FeedbackStatus::Closed, 'assigned_to' => $handler->id]);
+        Feedback::factory()->create(['status' => FeedbackStatus::New]);
+        Feedback::factory()->create(['status' => FeedbackStatus::Resolved]);
+
+        $this->actingAs($handler)
+            ->get(route('queue.index', ['assignee' => 'me']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tabCounts', ['open' => 1, 'resolved' => 0, 'closed' => 1])
+                ->has('feedbacks', 1),
+            );
+    }
+
     public function test_admin_feedback_page_filters_by_any_assignee(): void
     {
         $admin = User::factory()->create(['role' => UserRole::Admin]);
