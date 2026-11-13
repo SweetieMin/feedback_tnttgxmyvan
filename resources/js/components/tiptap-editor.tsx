@@ -2,6 +2,7 @@ import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import type { JSONContent } from '@tiptap/react';
 import { Selection } from '@tiptap/extensions';
 import { toast } from 'sonner';
+import { PasteFeedbackImages } from '@/components/tiptap-extension/paste-feedback-images';
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
 import '@/components/tiptap-node/image-upload-node/image-upload-node.scss';
 import '@/components/tiptap-styles';
@@ -46,6 +47,7 @@ export function TiptapEditor({ profile, value, onChange }: TiptapEditorProps) {
         extensions: [
             ...getTiptapExtensions({ resizeImages: true }),
             Selection,
+            PasteFeedbackImages,
             ImageUploadNode.configure({
                 accept: IMAGE_ACCEPT,
                 maxSize: IMAGE_MAX_BYTES,
